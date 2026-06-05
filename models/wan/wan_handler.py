@@ -41,7 +41,11 @@ def test_wan_5B(base_model_type):
     return base_model_type in ["ti2v_2_2", "lucy_edit", "kiwi_edit"]
 
 def test_i2v_2_2(base_model_type):
-    return base_model_type in ["i2v_2_2", "i2v_2_2_multitalk", "i2v_2_2_svi2pro"]
+    return base_model_type in ["i2v_2_2", "i2v_2_2_multitalk", "i2v_2_2_svi2pro", "s2v_14b"]
+
+
+def test_s2v(base_model_type):
+    return base_model_type in ["s2v_14b"]
 
 
 def test_svi2pro(base_model_type):
@@ -56,7 +60,7 @@ class family_handler():
         return ["multitalk", "infinitetalk", "fantasy", "vace_14B", "vace_14B_2_2", "vace_multitalk_14B", "vace_standin_14B", "vace_lynx_14B",
                     "t2v_1.3B", "standin", "lynx_lite", "lynx", "t2v", "t2v_2_2", "vace_1.3B", "vace_ditto_14B", "phantom_1.3B", "phantom_14B",
                     "recam_1.3B", "animate", "alpha", "alpha2", "alpha_lynx", "chrono_edit",
-                    "i2v", "i2v_2_2", "i2v_2_2_multitalk", "ti2v_2_2", "lucy_edit", "kiwi_edit", "flf2v_720p", "fun_inp_1.3B", "fun_inp", "mocha", "steadydancer", "wanmove", "scail", "vista4d", "i2v_2_2_svi2pro", "bernini"]
+                    "i2v", "i2v_2_2", "i2v_2_2_multitalk", "ti2v_2_2", "lucy_edit", "kiwi_edit", "flf2v_720p", "fun_inp_1.3B", "fun_inp", "mocha", "steadydancer", "wanmove", "scail", "vista4d", "i2v_2_2_svi2pro", "s2v_14b", "bernini"]
 
 
     @staticmethod
@@ -233,7 +237,8 @@ class family_handler():
         extra_model_def["text_encoder_folder"] = text_encoder_folder
 
         
-        if multitalk or base_model_type in ["fantasy"]:
+        s2v = test_s2v(base_model_type)
+        if multitalk or base_model_type in ["fantasy"] or s2v:
             if multitalk:
                 extra_model_def["audio_prompt_choices"] = True                
             extra_model_def["any_audio_prompt"] = True
@@ -765,6 +770,26 @@ class family_handler():
                     "visible" : False,
                 }
             extra_model_def["video_length_locked"] = 81
+
+        if s2v:
+            extra_model_def["audio_guidance"] = True
+            extra_model_def["one_image_ref_only"] = True
+            extra_model_def["image_prompt_types_allowed"] = "S"
+            extra_model_def["custom_settings"] = [
+                {"id": "s2v_task_id", "name": "S2V task id", "label": "S2V task id", "type": "text", "default": "s2v-14B", "info": "Internal task identifier for Wan2.2 S2V."},
+                {"id": "s2v_checkpoint_folder", "name": "S2V checkpoint folder", "label": "S2V checkpoint folder", "type": "text", "default": "Wan2.2-S2V-14B", "info": "Folder expected in checkpoints paths."},
+                {"id": "s2v_longform_enabled", "name": "Enable long-form", "label": "Enable long-form S2V job", "type": "bool", "default": False},
+                {"id": "s2v_output_folder", "name": "Long-form output folder", "label": "Long-form output folder (blank = auto)", "type": "text", "default": ""},
+                {"id": "s2v_target_duration_seconds", "name": "Target duration (s)", "label": "Target duration (seconds, 0 = full audio)", "type": "int", "default": 0},
+                {"id": "s2v_chunk_seconds", "name": "Chunk seconds", "label": "Output reviewable chunk every X seconds", "type": "int", "default": 120},
+                {"id": "s2v_overlap_seconds", "name": "Chunk overlap (s)", "label": "Chunk overlap (seconds)", "type": "int", "default": 2},
+                {"id": "s2v_continuity_mode", "name": "Continuity mode", "label": "Continuity mode (independent|last_frame_carryover|overlap_trim)", "type": "text", "default": "independent"},
+                {"id": "s2v_stop_on_chunk_failure", "name": "Stop on failure", "label": "Stop on chunk failure", "type": "bool", "default": True},
+                {"id": "s2v_resume_job", "name": "Resume existing job", "label": "Resume existing long-form job", "type": "bool", "default": True},
+                {"id": "s2v_final_concat", "name": "Final concatenate", "label": "Final concatenate when finished", "type": "bool", "default": True},
+                {"id": "s2v_preserve_audio_chunks", "name": "Preserve audio chunks", "label": "Preserve chunk audio files", "type": "bool", "default": True},
+                {"id": "s2v_dry_run", "name": "Dry run", "label": "Dry-run chunk planning only", "type": "bool", "default": False},
+            ]
         if base_model_type in ["chrono_edit"]:
             from .chono_edit_prompt import image_prompt_enhancer_instructions        
             extra_model_def["image_prompt_enhancer_instructions"] = image_prompt_enhancer_instructions
@@ -782,7 +807,7 @@ class family_handler():
             image_prompt_types_allowed = "TSVL"
         elif base_model_type in ["lucy_edit", "kiwi_edit"]:
             image_prompt_types_allowed = "TVL"
-        elif multitalk or base_model_type in ["fantasy", "steadydancer", "scail"]:
+        elif multitalk or base_model_type in ["fantasy", "steadydancer", "scail", "s2v_14b"]:
             image_prompt_types_allowed = "SVL"
         elif svi2pro:
             image_prompt_types_allowed = "SEVL"
@@ -850,6 +875,14 @@ class family_handler():
                 "sourceFolderList" :  [""],
                 "fileList" : [ [ "Wan2.2_VAE.safetensors"]  ]
             }]
+        elif test_s2v(base_model_type):
+            download_def += [
+                {
+                    "repoId": "Wan-AI/Wan2.2-S2V-14B",
+                    "sourceFolderList": [""],
+                    "fileList": [["README.md"]],
+                }
+            ]
         else:
             wan_files = ["Wan2.1_VAE.safetensors", "Wan2.1_VAE_upscale2x_imageonly_real_v1.safetensors"]
             if base_model_type in ["fantasy"]:
@@ -1198,6 +1231,16 @@ class family_handler():
                 "sliding_window_overlap" : 1,
                 "sliding_window_size": 81,
             })
+        elif base_model_type in ["s2v_14b"]:
+            ui_defaults.update({
+                "image_prompt_type": "S",
+                "audio_prompt_type": "A",
+                "video_prompt_type": "",
+                "resolution": "1024x704",
+                "flow_shift": 3,
+                "guidance_scale": 5.0,
+                "sample_solver": "unipc",
+            })
 
         if test_svi2pro(base_model_type):
             ui_defaults.update({
@@ -1249,3 +1292,11 @@ class family_handler():
             model_mode = inputs["model_mode"]
             inputs["video_length"] = 5 if model_mode==0 else 29
             inputs["image_mode"] = 0 if model_mode==2 else 1
+
+        elif base_model_type in ["s2v_14b"]:
+            image_start = inputs.get("image_start")
+            audio_guide = inputs.get("audio_guide")
+            if image_start is None or (isinstance(image_start, list) and len(image_start) == 0):
+                return "S2V requires a reference image."
+            if audio_guide is None:
+                return "S2V requires an audio file."

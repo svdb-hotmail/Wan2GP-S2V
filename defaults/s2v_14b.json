@@ -1,0 +1,20 @@
+{
+    "model": {
+        "name": "S2V 14B",
+        "architecture": "s2v_14b",
+        "description": "Wan2.2 S2V 14B generates video from a prompt, one reference image, and one audio/music file.",
+        "URLs": [
+            "Wan2.2-S2V-14B/wan2.2_s2v_14b.safetensors"
+        ],
+        "group": "wan2_2"
+    },
+    "prompt": "a person singing on stage, cinematic lighting",
+    "resolution": "1024x704",
+    "video_length": 81,
+    "num_inference_steps": 40,
+    "guidance_scale": 5,
+    "flow_shift": 3,
+    "sample_solver": "unipc",
+    "image_prompt_type": "S",
+    "audio_prompt_type": "A"
+}
