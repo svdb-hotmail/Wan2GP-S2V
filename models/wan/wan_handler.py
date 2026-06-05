@@ -775,6 +775,7 @@ class family_handler():
             extra_model_def["audio_guidance"] = True
             extra_model_def["one_image_ref_only"] = True
             extra_model_def["image_prompt_types_allowed"] = "S"
+            extra_model_def["ignore_unused_weights"] = True
             extra_model_def["custom_settings"] = [
                 {"id": "s2v_task_id", "name": "S2V task id", "label": "S2V task id", "type": "text", "default": "s2v-14B", "info": "Internal task identifier for Wan2.2 S2V."},
                 {"id": "s2v_checkpoint_folder", "name": "S2V checkpoint folder", "label": "S2V checkpoint folder", "type": "text", "default": "Wan2.2-S2V-14B", "info": "Folder expected in checkpoints paths."},
