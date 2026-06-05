@@ -41,6 +41,81 @@ WanGP is a one-stop super app for the best open source generative models across 
 - **Audio postprocessing**: generate soundtracks with MMAudio, replace voices with SeedVC, or remux a video with any soundtrack.
 - **Ready-to-use plug-ins**: Gallery Browser, Motion Designer, Models/Checkpoints Manager, CivitAI browser and downloader, and more.
 
+## Wan2.2 S2V 14B (Audio-Driven Video)
+
+WanGP now includes a first-class Wan2.2 S2V mode named **S2V 14B**.
+
+- What it does: generates video from **prompt + one reference image + one audio/music file**.
+- Internal task id: `s2v-14B`.
+- Model family: Wan2.2.
+- Expected checkpoint folder: `Wan2.2-S2V-14B`.
+- Accepted S2V audio formats: `.wav`, `.mp3`, `.flac`, `.m4a`.
+
+Required inputs for S2V:
+
+- Prompt text.
+- Start image (reference image).
+- Audio source.
+
+If required inputs are missing, WanGP now fails early with explicit messages such as:
+
+- `S2V requires an audio file.`
+- `S2V requires a reference image.`
+- `Wan2.2-S2V-14B checkpoint not found. Expected folder: ...`
+
+### Model download/location notes
+
+- The S2V model files are expected under `Wan2.2-S2V-14B` in your configured checkpoints paths.
+- Registry entry points to Hugging Face repo `Wan-AI/Wan2.2-S2V-14B`.
+- If automatic full checkpoint download is not available for your setup, place the S2V checkpoint files manually in that folder.
+
+### Long-form S2V chunked jobs
+
+S2V includes a managed long-form batch mode for very long audio-driven renders.
+
+- Enable with custom setting: `Enable long-form S2V job`.
+- Set chunk cadence with: `Output reviewable chunk every X seconds`.
+- Optional overlap: `Chunk overlap (seconds)`.
+- Continuity mode values: `independent`, `last_frame_carryover`, `overlap_trim`.
+- Resume supported via `Resume existing long-form job`.
+- Stop policy via `Stop on chunk failure`.
+- Optional final concat via `Final concatenate when finished`.
+
+Output structure:
+
+- `job_config.json`
+- `job_state.json`
+- `chunks/chunk_0001.mp4`, `chunks/chunk_0001.wav`, `chunks/chunk_0001.json`, ...
+- `final/final_concat.mp4` when concat succeeds
+
+Chunks are written immediately, so completed chunks can be reviewed while later chunks are still rendering.
+
+### Example S2V usage
+
+1. Select model `S2V 14B`.
+2. Set prompt.
+3. Provide one Start Image.
+4. Provide one Audio Source.
+5. Optionally enable long-form and tune chunk size/overlap.
+6. Generate.
+
+### Hardware and runtime warning
+
+Long S2V runs are expensive. A full 2-hour render can take many hours or days depending on GPU, resolution, steps, precision, and chunking settings.
+
+For full-quality single-GPU runs, expect very high VRAM demand (often in the 80 GB+ class without aggressive offload/optimization).
+
+### Audio prep recommendations
+
+- Use clean vocal/music stems when possible.
+- Trim the source track to your target duration before generation.
+- Keep consistent loudness to reduce abrupt transitions across chunks.
+
+Known limitation:
+
+- Independent chunk generation may not produce perfect visual continuity at chunk boundaries.
+- `last_frame_carryover` and overlap-based workflows can help, but may introduce identity drift or long-run artifacts.
+
 **Discord Server to get Help from the WanGP Community and show your Best Gens:** https://discord.gg/g7efUW9jGV
 
 **Follow DeepBeepMeep on Twitter/X to get the Latest News**: https://x.com/deepbeepmeep

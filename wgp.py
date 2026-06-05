@@ -818,6 +818,7 @@ def validate_settings(state, model_type, single_prompt, inputs, silent=False):
     is_edit_mode = str(inputs.get("mode", "") or "").startswith("edit_")
     any_steps_skipping = model_def.get("tea_cache", False) or model_def.get("mag_cache", False)
     model_type = get_base_model_type(model_type)
+    s2v_mode = model_type in ["s2v_14b"]
 
     model_filename = get_model_filename(model_type)  
 
@@ -1049,7 +1050,7 @@ def validate_settings(state, model_type, single_prompt, inputs, silent=False):
 
     if "A" in audio_prompt_type:
         if audio_guide == None and not model_def.get("auto_null_audio", False):
-            return err("You must provide an Audio Source")
+            return err("S2V requires an audio file." if s2v_mode else "You must provide an Audio Source")
     else:
         audio_guide = None
 
@@ -1149,7 +1150,7 @@ def validate_settings(state, model_type, single_prompt, inputs, silent=False):
                 image_start = [Image.new("RGB", (width, height), (0, 0, 0, 255))] 
 
         if image_start == None or isinstance(image_start, list) and len(image_start) == 0:
-            return err("You must provide a Start Image")
+            return err("S2V requires a reference image." if s2v_mode else "You must provide a Start Image")
         image_start = clean_image_list(image_start)        
         if image_start == None :
             return err("Start Image should be an Image")
@@ -1253,6 +1254,16 @@ def validate_settings(state, model_type, single_prompt, inputs, silent=False):
         error = model_handler.validate_generative_settings(model_type, model_def, inputs)
         if error is not None and len(error) > 0:
             return err(error)
+
+    if s2v_mode:
+        custom_settings = inputs.get("custom_settings", {}) or {}
+        s2v_checkpoint_folder = str(custom_settings.get("s2v_checkpoint_folder", "Wan2.2-S2V-14B") or "Wan2.2-S2V-14B").strip()
+        if fl.locate_folder(s2v_checkpoint_folder, error_if_none=False) is None:
+            return err(f"Wan2.2-S2V-14B checkpoint not found. Expected folder: {s2v_checkpoint_folder}")
+        if audio_guide is not None:
+            ext = os.path.splitext(os.fspath(audio_guide))[1].lower()
+            if ext not in {".wav", ".mp3", ".flac", ".m4a"}:
+                return err("S2V requires an audio file.")
     return inputs, prompts, image_start, image_end, ""
 
 
@@ -6498,6 +6509,119 @@ def generate_video(
     
     base_model_type = get_base_model_type(model_type)
     model_handler = get_model_handler(base_model_type)
+
+    if base_model_type == "s2v_14b":
+        s2v_settings = custom_settings or {}
+        enable_longform = bool(s2v_settings.get("s2v_longform_enabled", False))
+        if enable_longform and image_mode == 0:
+            from models.wan.s2v_longform import run_longform_job, estimate_required_disk_bytes
+
+            def _to_int(value, default):
+                try:
+                    return int(value)
+                except Exception:
+                    return int(default)
+
+            def _list_video_outputs():
+                return set(glob.glob(os.path.join(save_path, "*.mp4")) + glob.glob(os.path.join(save_path, "*.mov")) + glob.glob(os.path.join(save_path, "*.mkv")))
+
+            base_call_args = get_function_arguments(generate_video, locals())
+            chunk_seconds = max(1, _to_int(s2v_settings.get("s2v_chunk_seconds", 120), 120))
+            overlap_seconds = max(0, _to_int(s2v_settings.get("s2v_overlap_seconds", 2), 2))
+            target_duration_seconds = max(0, _to_int(s2v_settings.get("s2v_target_duration_seconds", 0), 0))
+            stop_on_chunk_failure = bool(s2v_settings.get("s2v_stop_on_chunk_failure", True))
+            resume_job = bool(s2v_settings.get("s2v_resume_job", True))
+            final_concat = bool(s2v_settings.get("s2v_final_concat", True))
+            preserve_audio_chunks = bool(s2v_settings.get("s2v_preserve_audio_chunks", True))
+            continuity_mode = str(s2v_settings.get("s2v_continuity_mode", "independent") or "independent").strip()
+            dry_run = bool(s2v_settings.get("s2v_dry_run", False))
+            output_root = str(s2v_settings.get("s2v_output_folder", "") or "").strip()
+            if len(output_root) == 0:
+                output_root = os.path.join(save_path, "s2v_longform", f"job_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}")
+            os.makedirs(output_root, exist_ok=True)
+
+            est_bytes = estimate_required_disk_bytes(
+                total_duration_seconds=float(target_duration_seconds or 7200),
+                width=width,
+                height=height,
+                fps=float(get_computed_fps(force_fps, base_model_type, None, None)),
+            )
+            free_bytes = shutil.disk_usage(output_root).free
+            if free_bytes < est_bytes:
+                gr.Info("Warning: free disk space may be insufficient for this long-form S2V job.")
+
+            render_context = {
+                "current_image_start": image_start,
+                "continuity_mode": continuity_mode,
+            }
+
+            def render_longform_chunk(chunk, chunk_audio_path, context):
+                chunk_name = f"chunk_{chunk.index:04d}"
+                before_files = _list_video_outputs()
+                call_args = dict(base_call_args)
+                chunk_frames = max(5, int(round(float(chunk.duration_seconds) * float(get_computed_fps(force_fps, base_model_type, None, None)))))
+                chunk_custom_settings = dict(s2v_settings)
+                chunk_custom_settings["s2v_longform_enabled"] = False
+                chunk_custom_settings["s2v_dry_run"] = False
+                call_args.update({
+                    "audio_guide": chunk_audio_path,
+                    "audio_guide2": None,
+                    "audio_prompt_type": "A",
+                    "video_length": chunk_frames,
+                    "repeat_generation": 1,
+                    "output_filename": chunk_name,
+                    "custom_settings": chunk_custom_settings,
+                    "image_start": context.get("current_image_start", image_start),
+                    "image_end": None,
+                    "video_source": None,
+                    "mode": "generate",
+                })
+                ok = generate_video(**call_args)
+                if not ok:
+                    raise RuntimeError(f"Failed to render {chunk_name}")
+
+                after_files = _list_video_outputs()
+                new_files = list(after_files - before_files)
+                if len(new_files) == 0:
+                    named = sorted(glob.glob(os.path.join(save_path, f"{chunk_name}*.mp4")), key=os.path.getmtime)
+                    if len(named) == 0:
+                        raise RuntimeError(f"No output video generated for {chunk_name}")
+                    output_path = named[-1]
+                else:
+                    output_path = max(new_files, key=os.path.getmtime)
+
+                if context.get("continuity_mode") == "last_frame_carryover":
+                    try:
+                        carry = get_video_frame(output_path, -1, return_last_if_missing=True, target_fps=float(get_computed_fps(force_fps, base_model_type, None, None)), return_PIL=True)
+                        if carry is not None:
+                            context["current_image_start"] = [carry]
+                    except Exception:
+                        pass
+                return output_path
+
+            send_cmd("status", "Preparing S2V long-form chunk plan...")
+            run_longform_job(
+                output_root=output_root,
+                source_audio=audio_guide,
+                prompt=prompt,
+                model_type="s2v-14B",
+                resolution=resolution,
+                fps=float(get_computed_fps(force_fps, base_model_type, None, None)),
+                chunk_seconds=float(chunk_seconds),
+                overlap_seconds=float(overlap_seconds),
+                requested_duration_seconds=float(target_duration_seconds),
+                continuity_mode=continuity_mode,
+                stop_on_chunk_failure=stop_on_chunk_failure,
+                resume=resume_job,
+                do_concat=final_concat,
+                preserve_audio_chunks=preserve_audio_chunks,
+                dry_run=dry_run,
+                render_chunk=render_longform_chunk,
+                render_context=render_context,
+            )
+            send_cmd("status", f"S2V long-form job completed: {output_root}")
+            return True
+
     block_size = model_def.get("vae_block_size", 16)
     width, height = resolution.split("x")
     width, height = int(width) // block_size * block_size, int(height) // block_size * block_size
