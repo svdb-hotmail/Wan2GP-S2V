@@ -6512,7 +6512,20 @@ def generate_video(
 
     if base_model_type == "s2v_14b":
         s2v_settings = custom_settings or {}
-        enable_longform = bool(s2v_settings.get("s2v_longform_enabled", False))
+
+        def _to_bool(value, default=False):
+            if value is None:
+                return bool(default)
+            if isinstance(value, bool):
+                return value
+            text = str(value).strip().lower()
+            if text in ("1", "true", "yes", "on"):
+                return True
+            if text in ("0", "false", "no", "off", ""):
+                return False
+            return bool(default)
+
+        enable_longform = _to_bool(s2v_settings.get("s2v_longform_enabled", False), default=False)
         if enable_longform and image_mode == 0:
             from models.wan.s2v_longform import run_longform_job, estimate_required_disk_bytes
 
@@ -6529,12 +6542,12 @@ def generate_video(
             chunk_seconds = max(1, _to_int(s2v_settings.get("s2v_chunk_seconds", 120), 120))
             overlap_seconds = max(0, _to_int(s2v_settings.get("s2v_overlap_seconds", 2), 2))
             target_duration_seconds = max(0, _to_int(s2v_settings.get("s2v_target_duration_seconds", 0), 0))
-            stop_on_chunk_failure = bool(s2v_settings.get("s2v_stop_on_chunk_failure", True))
-            resume_job = bool(s2v_settings.get("s2v_resume_job", True))
-            final_concat = bool(s2v_settings.get("s2v_final_concat", True))
-            preserve_audio_chunks = bool(s2v_settings.get("s2v_preserve_audio_chunks", True))
+            stop_on_chunk_failure = _to_bool(s2v_settings.get("s2v_stop_on_chunk_failure", True), default=True)
+            resume_job = _to_bool(s2v_settings.get("s2v_resume_job", True), default=True)
+            final_concat = _to_bool(s2v_settings.get("s2v_final_concat", True), default=True)
+            preserve_audio_chunks = _to_bool(s2v_settings.get("s2v_preserve_audio_chunks", True), default=True)
             continuity_mode = str(s2v_settings.get("s2v_continuity_mode", "independent") or "independent").strip()
-            dry_run = bool(s2v_settings.get("s2v_dry_run", False))
+            dry_run = _to_bool(s2v_settings.get("s2v_dry_run", False), default=False)
             output_root = str(s2v_settings.get("s2v_output_folder", "") or "").strip()
             if len(output_root) == 0:
                 output_root = os.path.join(save_path, "s2v_longform", f"job_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}")
